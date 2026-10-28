@@ -45,8 +45,8 @@ export interface Fill {
 }
 
 export interface OrderBook {
-  bids: Map<number, RestingOrder[]>;
-  asks: Map<number, RestingOrder[]>;
+  bids: Map<number, OrderRecord[]>;
+  asks: Map<number, OrderRecord[]>;
 }
 
 export interface CreateOrderInput {

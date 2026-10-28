@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { createClient } from "redis";
 import { env } from "./utils/env.js";
+import { cancelOrder, createOrder, getBalance, getDepth, getOrder } from "./engine.js";
+import type { CreateOrderInput } from "./store/exchange-store.js";
 
 export type EngineCommandType =
   | "create_order"
@@ -33,62 +35,23 @@ const responseClient = createClient({ url: env.redisUrl }).on("error", (error) =
 
 await Promise.all([brokerClient.connect(), responseClient.connect()]);
 
-// :-)) I added this just to check the flow, remove it when you start
-const DUMMY_SELL_ORDER = {
-  orderId: "dummy-sell-order-1",
-  userId: "dummy-seller",
-  type: "limit",
-  side: "sell",
-  symbol: "BTC",
-  price: 100,
-  qty: 1,
-  filledQty: 0,
-  status: "open",
-};
+function handleEngineRequest({ type, payload: p }: EngineRequest): unknown {
+  const userId = p["userId"] as string;
+  switch (type) {
+    case "create_order": return createOrder(p as unknown as CreateOrderInput);
+    case "get_depth": return getDepth(p["symbol"] as string);
+    case "get_user_balance": return getBalance(userId);
+    case "get_order": return getOrder(p["orderId"] as string, userId);
+    case "cancel_order": return cancelOrder(p["orderId"] as string, userId);
+    default: throw new Error(`Unknown message type: ${type}`);
+  }
+}
 
 async function sendResponse(responseQueue: string, response: EngineResponse): Promise<void> {
   await responseClient.lPush(responseQueue, JSON.stringify(response));
 }
 
-function handleEngineRequest(message: EngineRequest): unknown {
-  /**
-   * TODO(student):
-   * 1. Check _message.type.
-   * 2. Read _message.payload.
-   * 3. Call your order book / balance / order logic.
-   * 4. Return the data that should go back to the backend.
-   *
-   * Required message types:
-   * - create_order
-   * - get_depth
-   * - get_user_balance
-   * - get_order
-   * - cancel_order
-   */
-
-  // just checking the flow, remove this when you start implementing the logic
-  if (message.type === "create_order") {
-    return {
-      orderId: crypto.randomUUID(),
-      status: "filled",
-      filledQty: DUMMY_SELL_ORDER.qty,
-      averagePrice: DUMMY_SELL_ORDER.price,
-      fills: [
-        {
-          fillId: crypto.randomUUID(),
-          symbol: DUMMY_SELL_ORDER.symbol,
-          price: DUMMY_SELL_ORDER.price,
-          qty: DUMMY_SELL_ORDER.qty,
-          buyOrderId: "request-buy-order",
-          sellOrderId: DUMMY_SELL_ORDER.orderId,
-        },
-      ],
-      note: "Smoke-test response only. Students must replace this with real matching logic.",
-    };
-  }
-
-  throw new Error("TODO(student): implement this engine request type");
-}
+// ─── MAIN EVENT LOOP ────────────────────────────────────────────────────────
 
 console.log(`Engine listening on Redis queue: ${env.incomingQueue}`);
 
